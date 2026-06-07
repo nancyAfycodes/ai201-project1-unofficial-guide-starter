@@ -31,6 +31,9 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 100)) # tokens
 # Output file for all chunks
 OUTPUT_FILE = "chunks.jsonl"
 
+# BeautifulSoup parser
+HTML_PARSER = "html.parser"
+
 # Reddit API credentials (set as env vars or fill in directly for local use)
 REDDIT_CLIENT_ID     = os.getenv("REDDIT_CLIENT_ID", "YOUR_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
@@ -279,7 +282,7 @@ def fetch_page_text(url: str) -> str:
     headers = {"User-Agent": "orgo-rag-bot/0.1 (educational project)"}
     r = requests.get(url, headers=headers, timeout=15)
     r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(r.text, HTML_PARSER)
     # LibreTexts stores content in #content or article tags
     content = soup.find("div", {"id": "content"}) or soup.find("article")
     if content:
@@ -323,7 +326,7 @@ def ingest_khan_academy() -> list[dict]:
         print(f"  Fetching Khan Academy: {url[-60:]} ...")
         try:
             r = requests.get(url, headers=headers, timeout=15)
-            soup = BeautifulSoup(r.text, "html.parser")
+            soup = BeautifulSoup(r.text, HTML_PARSER)
             # Extract any server-rendered text (titles, descriptions, topic lists)
             text = " ".join(tag.get_text(" ", strip=True)
                             for tag in soup.find_all(["h1", "h2", "h3", "p", "li"]))
@@ -332,7 +335,7 @@ def ingest_khan_academy() -> list[dict]:
                 all_chunks.extend(chunks)
                 print(f"    → {len(chunks)} chunks")
             else:
-                print(f"    ⚠ Little static content found (JS-rendered page)")
+                print("    ⚠ Little static content found (JS-rendered page)")
             time.sleep(1)
         except Exception as e:
             print(f"    ✗ Failed: {e}")
@@ -362,7 +365,7 @@ def ingest_stack_exchange(tag: str = "organic-chemistry", page_size: int = 30) -
 
     all_chunks = []
     for item in items:
-        q_text = BeautifulSoup(item.get("body", ""), "html.parser").get_text(" ", strip=True)
+        q_text = BeautifulSoup(item.get("body", ""), HTML_PARSER).get_text(" ", strip=True)
         q_url  = item.get("link", "")
         title  = item.get("title", "")
         combined = f"Q: {title}\n\n{q_text}"
