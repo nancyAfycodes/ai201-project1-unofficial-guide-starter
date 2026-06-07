@@ -183,7 +183,7 @@ def gradio_query(question: str, top_k: int) -> tuple[str, str, str]:
 def build_interface() -> gr.Blocks:
     """Construct and return the Gradio Blocks interface."""
 
-    with gr.Blocks(title="The Unofficial Orgo Guide", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks() as demo:
 
         gr.Markdown(
             """
@@ -278,5 +278,7 @@ if __name__ == "__main__":
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
-        share=False,       # set True to get a public Gradio link
+        share=False,
+        title="The Unofficial Orgo Guide",
+        theme=gr.themes.Soft(),
     )
