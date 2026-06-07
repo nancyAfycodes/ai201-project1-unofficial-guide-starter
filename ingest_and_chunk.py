@@ -293,7 +293,7 @@ LIBRETEXTS_URLS = [
     
     # Resonance structures — supports carbocation and mechanism questions
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/Map%3A_Organic_Chemistry_(Wade)_Complete_and_Semesters_I_and_II/"
-    "Map%3A_Organic_Chemistry_I_(Wade)/01%3A_Introduction_and_Review/1.10%3A_Resonance"
+    "Map%3A_Organic_Chemistry_I_(Wade)/01%3A_Introduction_and_Review/1.10%3A_Resonance",
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/Book%3A_Organic_Chemistry_with_a_Biological_Emphasis_v2.0_(Soderberg)/"
     "02%3A_Introduction_to_Organic_Structure_and_Bonding_II/2.04%3A_Resonance",
 ]
