@@ -45,11 +45,13 @@ The domain I have chosen is organic chemistry. Reason being the struggle many st
      A review-heavy corpus warrants different chunking than a long FAQ. -->
 
 **Chunk size:**
+Chunk size: ~ 500 tokens
 
 **Overlap:**
+Overlap: ~ 100 tokens
 
 **Reasoning:**
-
+Since organic chemistry (OChem) answers can range from one-liners to multiline paragraphs, I think a hybrid chunking strategy wii be the most effective. I think a chunk size of about 500 tokens with an overlap of about 100 tokens ensures that answers are not lost at retrieval time. Another strategy is to add metadata tagging per chunk to help in improving answer quality.
 ---
 
 ## Retrieval Approach
