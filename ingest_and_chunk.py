@@ -1,0 +1,473 @@
+"""
+Unofficial Guide: Organic Chemistry RAG Pipeline
+Stage 1 — Document Ingestion
+Stage 2 — Chunking
+
+Sources:
+- Reddit (r/OrganicChemistry, r/premed, r/Mcat)
+- Chemistry Stack Exchange
+- LibreTexts Organic Chemistry
+- Khan Academy Organic Chemistry
+"""
+
+import os
+import time
+import json
+import re
+import requests
+from dataclasses import dataclass, asdict
+from typing import Optional
+from bs4 import BeautifulSoup
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+# Dynamic chunk size and overlap — override via environment variables or edit here
+CHUNK_SIZE    = int(os.getenv("CHUNK_SIZE", 500))    # tokens (approx. words)
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 100)) # tokens
+
+# Output file for all chunks
+OUTPUT_FILE = "chunks.jsonl"
+
+# Reddit API credentials (set as env vars or fill in directly for local use)
+REDDIT_CLIENT_ID     = os.getenv("REDDIT_CLIENT_ID", "YOUR_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
+REDDIT_USER_AGENT    = os.getenv("REDDIT_USER_AGENT", "orgo-rag-bot/0.1")
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Chunk:
+    chunk_id:     str            # unique identifier
+    source:       str            # e.g. "reddit", "libretexts", "stackexchange", "khanacademy"
+    source_url:   str            # original URL
+    topic:        str            # e.g. "SN1/SN2", "stereochemistry", "general"
+    content_type: str            # "conceptual" | "study_strategy"
+    text:         str            # chunk text
+    chunk_index:  int            # position within the original document
+    total_chunks: int            # total chunks from this document
+
+
+# ---------------------------------------------------------------------------
+# Utility: approximate token count (1 token ≈ 1 word for English)
+# ---------------------------------------------------------------------------
+
+def count_tokens(text: str) -> int:
+    return len(text.split())
+
+
+# ---------------------------------------------------------------------------
+# Utility: infer topic from text
+# ---------------------------------------------------------------------------
+
+TOPIC_KEYWORDS = {
+    "SN1/SN2/E1/E2":       ["sn1", "sn2", "e1", "e2", "substitution", "elimination",
+                             "nucleophilic", "leaving group"],
+    "stereochemistry":      ["stereochemistry", "enantiomer", "diastereomer", "chiral",
+                             "r/s", "rs configuration", "optical", "racemic", "fischer"],
+    "carbonyl chemistry":   ["carbonyl", "aldehyde", "ketone", "carboxylic", "ester",
+                             "amide", "acyl", "nucleophilic addition"],
+    "reaction mechanisms":  ["mechanism", "arrow pushing", "curved arrow", "intermediate",
+                             "transition state", "carbocation", "carbanion", "radical"],
+    "aromaticity":          ["aromatic", "benzene", "huckel", "resonance", "delocali"],
+    "acids and bases":      ["pka", "acid", "base", "conjugate", "proton", "deproton"],
+    "study strategy":       ["study", "memorize", "exam", "tips", "professor", "grade",
+                             "orgo 1", "orgo 2", "survive", "advice", "premed", "mcat"],
+}
+
+def infer_topic(text: str) -> str:
+    lower = text.lower()
+    for topic, keywords in TOPIC_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            return topic
+    return "general"
+
+
+def infer_content_type(text: str, source: str) -> str:
+    """Conceptual = explains chemistry; study_strategy = advice on learning."""
+    if source in ("reddit", "premed_reddit", "mcat_reddit"):
+        lower = text.lower()
+        strategy_signals = ["study", "exam", "tips", "advice", "professor",
+                            "grade", "survive", "premed", "mcat", "memorize"]
+        if any(s in lower for s in strategy_signals):
+            return "study_strategy"
+    return "conceptual"
+
+
+# ---------------------------------------------------------------------------
+# Core chunking function (fixed-size with overlap, dynamic via config)
+# ---------------------------------------------------------------------------
+
+def chunk_text(
+    text: str,
+    source: str,
+    source_url: str,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+) -> list[dict]:
+    """
+    Split text into overlapping fixed-size chunks.
+    chunk_size and overlap are token-approximate (word-based).
+    Returns a list of Chunk dicts ready for serialisation.
+    """
+    words = text.split()
+    chunks = []
+    start = 0
+    index = 0
+
+    while start < len(words):
+        end = start + chunk_size
+        chunk_words = words[start:end]
+        chunk_text_str = " ".join(chunk_words)
+
+        topic        = infer_topic(chunk_text_str)
+        content_type = infer_content_type(chunk_text_str, source)
+
+        chunk = Chunk(
+            chunk_id     = f"{source}_{index}_{hash(chunk_text_str) & 0xFFFFFF:06x}",
+            source       = source,
+            source_url   = source_url,
+            topic        = topic,
+            content_type = content_type,
+            text         = chunk_text_str,
+            chunk_index  = index,
+            total_chunks = -1,   # filled in after all chunks are created
+        )
+        chunks.append(chunk)
+
+        # Advance by (chunk_size - overlap) to create sliding window
+        start += chunk_size - overlap
+        index += 1
+
+    # Back-fill total_chunks now that we know the final count
+    for c in chunks:
+        c.total_chunks = len(chunks)
+
+    return [asdict(c) for c in chunks]
+
+
+# ---------------------------------------------------------------------------
+# Semantic chunking for Reddit/Stack Exchange
+# (split on natural paragraph/comment boundaries first, then apply fixed chunking
+#  on any segment that still exceeds chunk_size)
+# ---------------------------------------------------------------------------
+
+def semantic_chunk(
+    text: str,
+    source: str,
+    source_url: str,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
+) -> list[dict]:
+    """
+    For student-generated content (Reddit, Stack Exchange):
+    1. Split on paragraph / double-newline boundaries.
+    2. If a segment is under chunk_size tokens, keep it as-is.
+    3. If a segment exceeds chunk_size, fall back to fixed chunking with overlap.
+    """
+    # Split on blank lines or comment separators
+    segments = re.split(r"\n{2,}", text.strip())
+    all_chunks = []
+
+    for seg in segments:
+        seg = seg.strip()
+        if not seg:
+            continue
+        if count_tokens(seg) <= chunk_size:
+            topic        = infer_topic(seg)
+            content_type = infer_content_type(seg, source)
+            idx = len(all_chunks)
+            chunk = Chunk(
+                chunk_id     = f"{source}_{idx}_{hash(seg) & 0xFFFFFF:06x}",
+                source       = source,
+                source_url   = source_url,
+                topic        = topic,
+                content_type = content_type,
+                text         = seg,
+                chunk_index  = idx,
+                total_chunks = -1,
+            )
+            all_chunks.append(asdict(chunk))
+        else:
+            # Segment too long — apply fixed chunking with overlap
+            sub_chunks = chunk_text(seg, source, source_url, chunk_size, overlap)
+            # Re-index sub-chunks relative to the running total
+            for sc in sub_chunks:
+                sc["chunk_index"] = len(all_chunks)
+                all_chunks.append(sc)
+
+    for c in all_chunks:
+        c["total_chunks"] = len(all_chunks)
+
+    return all_chunks
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: Ingestion helpers
+# ---------------------------------------------------------------------------
+
+# -- Reddit --
+
+def get_reddit_token() -> str:
+    auth = requests.auth.HTTPBasicAuth(REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET)
+    data = {"grant_type": "client_credentials"}
+    headers = {"User-Agent": REDDIT_USER_AGENT}
+    r = requests.post(
+        "https://www.reddit.com/api/v1/access_token",
+        auth=auth, data=data, headers=headers, timeout=10
+    )
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def fetch_reddit_posts(subreddit: str, token: str, limit: int = 25) -> list[dict]:
+    """Fetch top posts from a subreddit (top/all time)."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": REDDIT_USER_AGENT,
+    }
+    url = f"https://oauth.reddit.com/r/{subreddit}/top"
+    params = {"t": "all", "limit": limit}
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    r.raise_for_status()
+    posts = []
+    for post in r.json()["data"]["children"]:
+        d = post["data"]
+        posts.append({
+            "title": d.get("title", ""),
+            "selftext": d.get("selftext", ""),
+            "url": f"https://reddit.com{d.get('permalink', '')}",
+            "score": d.get("score", 0),
+        })
+    return posts
+
+
+def ingest_reddit(subreddit: str, label: str, token: str) -> list[dict]:
+    """Ingest top posts from a subreddit and chunk them semantically."""
+    print(f"  Fetching r/{subreddit} ...")
+    posts = fetch_reddit_posts(subreddit, token, limit=25)
+    all_chunks = []
+    for post in posts:
+        text = f"{post['title']}\n\n{post['selftext']}".strip()
+        if len(text) < 50:
+            continue
+        chunks = semantic_chunk(text, label, post["url"])
+        all_chunks.extend(chunks)
+        time.sleep(0.5)   # polite rate limiting
+    print(f"    → {len(all_chunks)} chunks from r/{subreddit}")
+    return all_chunks
+
+
+# -- LibreTexts --
+
+LIBRETEXTS_URLS = [
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
+    "Organic_Chemistry_(Clayden_et_al.)/12%3A_Nucleophilic_Substitution_at_Saturated_Carbon",
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
+    "Organic_Chemistry_(Clayden_et_al.)/13%3A_Conformational_Analysis",
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
+    "Organic_Chemistry_(Clayden_et_al.)/14%3A_Stereochemistry",
+]
+
+def fetch_page_text(url: str) -> str:
+    """Scrape main text content from a LibreTexts or similar page."""
+    headers = {"User-Agent": "orgo-rag-bot/0.1 (educational project)"}
+    r = requests.get(url, headers=headers, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    # LibreTexts stores content in #content or article tags
+    content = soup.find("div", {"id": "content"}) or soup.find("article")
+    if content:
+        return content.get_text(separator="\n", strip=True)
+    return soup.get_text(separator="\n", strip=True)
+
+
+def ingest_libretexts() -> list[dict]:
+    """Ingest LibreTexts pages using fixed-size chunking with overlap."""
+    all_chunks = []
+    for url in LIBRETEXTS_URLS:
+        print(f"  Fetching LibreTexts: {url[-60:]} ...")
+        try:
+            text = fetch_page_text(url)
+            chunks = chunk_text(text, "libretexts", url)
+            all_chunks.extend(chunks)
+            print(f"    → {len(chunks)} chunks")
+            time.sleep(1)
+        except Exception as e:
+            print(f"    ✗ Failed: {e}")
+    return all_chunks
+
+
+# -- Khan Academy --
+
+KHAN_URLS = [
+    "https://www.khanacademy.org/science/organic-chemistry/substitution-elimination-reactions",
+    "https://www.khanacademy.org/science/organic-chemistry/stereochemistry-topic",
+    "https://www.khanacademy.org/science/organic-chemistry/acid-base-chemistry-organic",
+]
+
+def ingest_khan_academy() -> list[dict]:
+    """
+    Ingest Khan Academy overview pages.
+    Note: Khan Academy is JavaScript-heavy; this scrapes static meta content.
+    For richer content, consider their API or pre-downloaded transcripts.
+    """
+    all_chunks = []
+    headers = {"User-Agent": "orgo-rag-bot/0.1 (educational project)"}
+    for url in KHAN_URLS:
+        print(f"  Fetching Khan Academy: {url[-60:]} ...")
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            soup = BeautifulSoup(r.text, "html.parser")
+            # Extract any server-rendered text (titles, descriptions, topic lists)
+            text = " ".join(tag.get_text(" ", strip=True)
+                            for tag in soup.find_all(["h1", "h2", "h3", "p", "li"]))
+            if len(text) > 100:
+                chunks = semantic_chunk(text, "khanacademy", url)
+                all_chunks.extend(chunks)
+                print(f"    → {len(chunks)} chunks")
+            else:
+                print(f"    ⚠ Little static content found (JS-rendered page)")
+            time.sleep(1)
+        except Exception as e:
+            print(f"    ✗ Failed: {e}")
+    return all_chunks
+
+
+# -- Stack Exchange --
+
+def ingest_stack_exchange(tag: str = "organic-chemistry", page_size: int = 30) -> list[dict]:
+    """
+    Fetch top-voted Q&A from Chemistry Stack Exchange via public API.
+    No authentication required.
+    """
+    print(f"  Fetching Chemistry Stack Exchange tag: {tag} ...")
+    url = "https://api.stackexchange.com/2.3/questions"
+    params = {
+        "order": "desc",
+        "sort": "votes",
+        "tagged": tag,
+        "site": "chemistry",
+        "pagesize": page_size,
+        "filter": "withbody",
+    }
+    r = requests.get(url, params=params, timeout=15)
+    r.raise_for_status()
+    items = r.json().get("items", [])
+
+    all_chunks = []
+    for item in items:
+        q_text = BeautifulSoup(item.get("body", ""), "html.parser").get_text(" ", strip=True)
+        q_url  = item.get("link", "")
+        title  = item.get("title", "")
+        combined = f"Q: {title}\n\n{q_text}"
+        chunks = semantic_chunk(combined, "stackexchange", q_url)
+        all_chunks.extend(chunks)
+        time.sleep(0.3)
+
+    print(f"    → {len(all_chunks)} chunks from Stack Exchange")
+    return all_chunks
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: Save chunks to JSONL
+# ---------------------------------------------------------------------------
+
+def save_chunks(chunks: list[dict], output_file: str = OUTPUT_FILE) -> None:
+    with open(output_file, "w", encoding="utf-8") as f:
+        for chunk in chunks:
+            f.write(json.dumps(chunk) + "\n")
+    print(f"\n✅ Saved {len(chunks)} chunks to {output_file}")
+
+
+def load_chunks(output_file: str = OUTPUT_FILE) -> list[dict]:
+    chunks = []
+    with open(output_file, "r", encoding="utf-8") as f:
+        for line in f:
+            chunks.append(json.loads(line.strip()))
+    return chunks
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
+# ---------------------------------------------------------------------------
+
+def run_pipeline(
+    chunk_size: int  = CHUNK_SIZE,
+    overlap: int     = CHUNK_OVERLAP,
+    output_file: str = OUTPUT_FILE,
+) -> list[dict]:
+    """
+    Run the full ingestion + chunking pipeline.
+
+    Override chunk size and overlap dynamically:
+        run_pipeline(chunk_size=300, overlap=60)
+    Or via environment variables before running:
+        CHUNK_SIZE=300 CHUNK_OVERLAP=60 python ingest_and_chunk.py
+    """
+    print("=" * 60)
+    print("Unofficial Guide — Organic Chemistry RAG Pipeline")
+    print(f"Chunk size: {chunk_size} tokens | Overlap: {overlap} tokens")
+    print("=" * 60)
+
+    all_chunks: list[dict] = []
+
+    # -- Reddit sources --
+    print("\n[1/4] Ingesting Reddit ...")
+    try:
+        token = get_reddit_token()
+        all_chunks += ingest_reddit("OrganicChemistry", "reddit",       token)
+        all_chunks += ingest_reddit("premed",           "premed_reddit", token)
+        all_chunks += ingest_reddit("Mcat",             "mcat_reddit",   token)
+    except Exception as e:
+        print(f"  ✗ Reddit ingestion failed: {e}")
+        print("  → Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET env vars.")
+
+    # -- LibreTexts --
+    print("\n[2/4] Ingesting LibreTexts ...")
+    all_chunks += ingest_libretexts()
+
+    # -- Khan Academy --
+    print("\n[3/4] Ingesting Khan Academy ...")
+    all_chunks += ingest_khan_academy()
+
+    # -- Stack Exchange --
+    print("\n[4/4] Ingesting Chemistry Stack Exchange ...")
+    all_chunks += ingest_stack_exchange()
+
+    # -- Summary --
+    print("\n--- Ingestion Summary ---")
+    source_counts: dict[str, int] = {}
+    type_counts:   dict[str, int] = {}
+    topic_counts:  dict[str, int] = {}
+    for c in all_chunks:
+        source_counts[c["source"]]       = source_counts.get(c["source"], 0) + 1
+        type_counts[c["content_type"]]   = type_counts.get(c["content_type"], 0) + 1
+        topic_counts[c["topic"]]         = topic_counts.get(c["topic"], 0) + 1
+
+    print(f"Total chunks: {len(all_chunks)}")
+    print("\nBy source:")
+    for src, count in sorted(source_counts.items()):
+        print(f"  {src:<20} {count}")
+    print("\nBy content type:")
+    for ct, count in sorted(type_counts.items()):
+        print(f"  {ct:<20} {count}")
+    print("\nBy topic (top 5):")
+    for topic, count in sorted(topic_counts.items(), key=lambda x: -x[1])[:5]:
+        print(f"  {topic:<30} {count}")
+
+    save_chunks(all_chunks, output_file)
+    return all_chunks
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    run_pipeline()
