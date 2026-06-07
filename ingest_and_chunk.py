@@ -212,84 +212,90 @@ def semantic_chunk(
 # Stage 1: Ingestion helpers
 # ---------------------------------------------------------------------------
 
-# -- Reddit --
+# # -- Reddit --
 
-def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
-    """
-    Fetch top posts from a subreddit using Reddit's public JSON API.
-    No credentials required — appends .json to the standard Reddit URL.
-    Browser-like headers are required; Reddit blocks requests that look automated.
-    """
-    url = f"https://www.reddit.com/r/{subreddit}/top.json"
-    headers = {
-        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/124.0.0.0 Safari/537.36",
-        "Accept":          "application/json, text/javascript, */*; q=0.01",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Referer":         "https://www.reddit.com/",
-        "DNT":             "1",
-    }
-    params = {"t": "all", "limit": limit}
-    r = requests.get(url, headers=headers, params=params, timeout=10)
-    r.raise_for_status()
-    posts = []
-    for post in r.json()["data"]["children"]:
-        d = post["data"]
-        posts.append({
-            "title":    d.get("title", ""),
-            "selftext": d.get("selftext", ""),
-            "url":      f"https://reddit.com{d.get('permalink', '')}",
-            "score":    d.get("score", 0),
-        })
-    return posts
+# def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
+#     """
+#     Fetch top posts from a subreddit using Reddit's public JSON API.
+#     No credentials required — appends .json to the standard Reddit URL.
+#     Browser-like headers are required; Reddit blocks requests that look automated.
+#     """
+#     url = f"https://www.reddit.com/r/{subreddit}/top.json"
+#     headers = {
+#         "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+#                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+#                            "Chrome/124.0.0.0 Safari/537.36",
+#         "Accept":          "application/json, text/javascript, */*; q=0.01",
+#         "Accept-Language": "en-US,en;q=0.9",
+#         "Accept-Encoding": "gzip, deflate, br",
+#         "Referer":         "https://www.reddit.com/",
+#         "DNT":             "1",
+#     }
+#     params = {"t": "all", "limit": limit}
+#     r = requests.get(url, headers=headers, params=params, timeout=10)
+#     r.raise_for_status()
+#     posts = []
+#     for post in r.json()["data"]["children"]:
+#         d = post["data"]
+#         posts.append({
+#             "title":    d.get("title", ""),
+#             "selftext": d.get("selftext", ""),
+#             "url":      f"https://reddit.com{d.get('permalink', '')}",
+#             "score":    d.get("score", 0),
+#         })
+#     return posts
 
 
-def ingest_reddit(subreddit: str, label: str) -> list[dict]:
-    """Ingest top posts from a subreddit and chunk them semantically."""
-    print(f"  Fetching r/{subreddit} ...")
-    posts = fetch_reddit_posts(subreddit, limit=25)
-    all_chunks = []
-    for post in posts:
-        text = f"{post['title']}\n\n{post['selftext']}".strip()
-        if len(text) < 50:
-            continue
-        chunks = semantic_chunk(text, label, post["url"])
-        all_chunks.extend(chunks)
-        time.sleep(0.5)   # polite rate limiting
-    print(f"    → {len(all_chunks)} chunks from r/{subreddit}")
-    return all_chunks
+# def ingest_reddit(subreddit: str, label: str) -> list[dict]:
+#     """Ingest top posts from a subreddit and chunk them semantically."""
+#     print(f"  Fetching r/{subreddit} ...")
+#     posts = fetch_reddit_posts(subreddit, limit=25)
+#     all_chunks = []
+#     for post in posts:
+#         text = f"{post['title']}\n\n{post['selftext']}".strip()
+#         if len(text) < 50:
+#             continue
+#         chunks = semantic_chunk(text, label, post["url"])
+#         all_chunks.extend(chunks)
+#         time.sleep(0.5)   # polite rate limiting
+#     print(f"    → {len(all_chunks)} chunks from r/{subreddit}")
+#     return all_chunks
 
 
 # -- LibreTexts --
 
 LIBRETEXTS_URLS = [
-    # Nucleophilic substitution (SN1/SN2) — chapter overview
+    # Nucleophilic substitution (SN1/SN2)
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_at_sp3_Carbon-_Nucleophilic_Substitution",
+    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_of_Alkyl_Halides-_Nucleophilic_Substitutions_and_Eliminations/"
+    "11.01%3A_The_Discovery_of_Nucleophilic_Substitution_Reactions",
+    
     # SN1 vs SN2 direct comparison
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_of_Alkyl_Halides-"
-    "_Nucleophilic_Substitutions_and_Eliminations/11.05%3A_Reactivity_of_the_Alkyl_Halide",
+    "https://chem.libretexts.org/Courses/Brevard_College/CHE_202%3A_Organic_Chemistry_II/"
+    "04%3A_Substitution_and_Elimination_reactions/4.08%3A_Comparison_of_SN1_and_SN2_Reactions",
+    
     # Stereochemistry
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
     "Organic_Chemistry_(OpenStax)/05%3A_Stereochemistry_at_Tetrahedral_Centers",
+    
     # Elimination reactions (E1/E2)
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/12%3A_Reactions_at_sp3_Carbon-_Elimination",
+    "https://chem.libretexts.org/Bookshelves/Inorganic_Chemistry/"
+    "Organometallic_Chemistry_(Evans)/04%3A_Fundamentals_of_Organometallic_Chemistry/4.01%3A_-Elimination_Reactions",
+
+    
     # Nucleophiles and electrophiles — directly covers Query 3
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/06%3A_An_Overview_of_Organic_Reactions/"
-    "6.03%3A_Polar_Reactions",
+    "https://chem.libretexts.org/Courses/Purdue/Chem_26505%3A_Organic_Chemistry_I_(Lipton)/"
+    "Chapter_7._Reactivity_and_Electron_Movement/7.1_Nucleophiles_and_Electrophiles",
+    
     # Carbocation stability and resonance — directly covers Query 2
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/07%3A_Alkenes-_Structure_and_Reactivity/"
-    "7.09%3A_Carbocation_Structure_and_Stability",
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/Organic_Chemistry_(Morsch_et_al.)/"
+    "07%3A_Alkenes-_Structure_and_Reactivity/7.10%3A_Carbocation_Structure_and_Stability",
+    
     # Resonance structures — supports carbocation and mechanism questions
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/02%3A_Polar_Covalent_Bonds%3B_Acids_and_Bases/"
-    "2.05%3A_Resonance",
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/Map%3A_Organic_Chemistry_(Wade)_Complete_and_Semesters_I_and_II/"
+    "Map%3A_Organic_Chemistry_I_(Wade)/01%3A_Introduction_and_Review/1.10%3A_Resonance"
+    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/Book%3A_Organic_Chemistry_with_a_Biological_Emphasis_v2.0_(Soderberg)/"
+    "02%3A_Introduction_to_Organic_Structure_and_Bonding_II/2.04%3A_Resonance",
 ]
 
 def clean_latex(text: str) -> str:
@@ -356,7 +362,7 @@ def ingest_libretexts() -> list[dict]:
 KHAN_URLS = [
     "https://www.khanacademy.org/science/organic-chemistry/substitution-elimination-reactions",
     "https://www.khanacademy.org/science/organic-chemistry/stereochemistry-topic",
-    "https://www.khanacademy.org/science/organic-chemistry/acid-base-chemistry-organic",
+    "https://www.khanacademy.org/science/organic-chemistry/organic-structures/acid-base-review/v/organic-acid-base-mechanisms",
 ]
 
 def ingest_khan_academy() -> list[dict]:
@@ -504,13 +510,13 @@ def run_pipeline(
     all_chunks: list[dict] = []
 
     # -- Reddit sources --
-    print("\n[1/4] Ingesting Reddit ...")
-    try:
-        all_chunks += ingest_reddit("OrganicChemistry", "reddit")
-        all_chunks += ingest_reddit("premed",           "premed_reddit")
-        all_chunks += ingest_reddit("Mcat",             "mcat_reddit")
-    except Exception as e:
-        print(f"  ✗ Reddit ingestion failed: {e}")
+    # print("\n[1/4] Ingesting Reddit ...")
+    # try:
+    #     all_chunks += ingest_reddit("OrganicChemistry", "reddit")
+    #     all_chunks += ingest_reddit("premed",           "premed_reddit")
+    #     all_chunks += ingest_reddit("Mcat",             "mcat_reddit")
+    # except Exception as e:
+    #     print(f"  ✗ Reddit ingestion failed: {e}")
 
     # -- LibreTexts --
     print("\n[2/4] Ingesting LibreTexts ...")
