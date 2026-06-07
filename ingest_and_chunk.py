@@ -16,7 +16,6 @@ import json
 import re
 import requests
 from dataclasses import dataclass, asdict
-from typing import Optional
 from bs4 import BeautifulSoup
 
 
@@ -34,10 +33,9 @@ OUTPUT_FILE = "chunks.jsonl"
 # BeautifulSoup parser
 HTML_PARSER = "html.parser"
 
-# Reddit API credentials (set as env vars or fill in directly for local use)
-REDDIT_CLIENT_ID     = os.getenv("REDDIT_CLIENT_ID", "YOUR_CLIENT_ID")
-REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
-REDDIT_USER_AGENT    = os.getenv("REDDIT_USER_AGENT", "orgo-rag-bot/0.1")
+# Reddit public JSON API — no credentials required
+# Uses the unauthenticated reddit.com/r/<subreddit>/top.json endpoint
+REDDIT_USER_AGENT = "orgo-rag-bot/0.1 (educational project, no auth)"
 
 
 # ---------------------------------------------------------------------------
@@ -216,44 +214,32 @@ def semantic_chunk(
 
 # -- Reddit --
 
-def get_reddit_token() -> str:
-    auth = requests.auth.HTTPBasicAuth(REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET)
-    data = {"grant_type": "client_credentials"}
+def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
+    """
+    Fetch top posts from a subreddit using Reddit's public JSON API.
+    No credentials required — appends .json to the standard Reddit URL.
+    """
+    url = f"https://www.reddit.com/r/{subreddit}/top.json"
     headers = {"User-Agent": REDDIT_USER_AGENT}
-    r = requests.post(
-        "https://www.reddit.com/api/v1/access_token",
-        auth=auth, data=data, headers=headers, timeout=10
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
-
-
-def fetch_reddit_posts(subreddit: str, token: str, limit: int = 25) -> list[dict]:
-    """Fetch top posts from a subreddit (top/all time)."""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "User-Agent": REDDIT_USER_AGENT,
-    }
-    url = f"https://oauth.reddit.com/r/{subreddit}/top"
-    params = {"t": "all", "limit": limit}
+    params  = {"t": "all", "limit": limit}
     r = requests.get(url, headers=headers, params=params, timeout=10)
     r.raise_for_status()
     posts = []
     for post in r.json()["data"]["children"]:
         d = post["data"]
         posts.append({
-            "title": d.get("title", ""),
+            "title":    d.get("title", ""),
             "selftext": d.get("selftext", ""),
-            "url": f"https://reddit.com{d.get('permalink', '')}",
-            "score": d.get("score", 0),
+            "url":      f"https://reddit.com{d.get('permalink', '')}",
+            "score":    d.get("score", 0),
         })
     return posts
 
 
-def ingest_reddit(subreddit: str, label: str, token: str) -> list[dict]:
+def ingest_reddit(subreddit: str, label: str) -> list[dict]:
     """Ingest top posts from a subreddit and chunk them semantically."""
     print(f"  Fetching r/{subreddit} ...")
-    posts = fetch_reddit_posts(subreddit, token, limit=25)
+    posts = fetch_reddit_posts(subreddit, limit=25)
     all_chunks = []
     for post in posts:
         text = f"{post['title']}\n\n{post['selftext']}".strip()
@@ -269,12 +255,15 @@ def ingest_reddit(subreddit: str, label: str, token: str) -> list[dict]:
 # -- LibreTexts --
 
 LIBRETEXTS_URLS = [
+    # Nucleophilic substitution (SN1/SN2)
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(Clayden_et_al.)/12%3A_Nucleophilic_Substitution_at_Saturated_Carbon",
+    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_at_sp3_Carbon-_Nucleophilic_Substitution",
+    # Stereochemistry
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(Clayden_et_al.)/13%3A_Conformational_Analysis",
+    "Organic_Chemistry_(OpenStax)/05%3A_Stereochemistry_at_Tetrahedral_Centers",
+    # Elimination reactions (E1/E2)
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(Clayden_et_al.)/14%3A_Stereochemistry",
+    "Organic_Chemistry_(OpenStax)/12%3A_Reactions_at_sp3_Carbon-_Elimination",
 ]
 
 def fetch_page_text(url: str) -> str:
@@ -423,13 +412,11 @@ def run_pipeline(
     # -- Reddit sources --
     print("\n[1/4] Ingesting Reddit ...")
     try:
-        token = get_reddit_token()
-        all_chunks += ingest_reddit("OrganicChemistry", "reddit",       token)
-        all_chunks += ingest_reddit("premed",           "premed_reddit", token)
-        all_chunks += ingest_reddit("Mcat",             "mcat_reddit",   token)
+        all_chunks += ingest_reddit("OrganicChemistry", "reddit")
+        all_chunks += ingest_reddit("premed",           "premed_reddit")
+        all_chunks += ingest_reddit("Mcat",             "mcat_reddit")
     except Exception as e:
         print(f"  ✗ Reddit ingestion failed: {e}")
-        print("  → Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET env vars.")
 
     # -- LibreTexts --
     print("\n[2/4] Ingesting LibreTexts ...")
