@@ -275,20 +275,42 @@ LIBRETEXTS_URLS = [
     # Elimination reactions (E1/E2)
     "https://chem.libretexts.org/Bookshelves/Inorganic_Chemistry/"
     "Organometallic_Chemistry_(Evans)/04%3A_Fundamentals_of_Organometallic_Chemistry/4.01%3A_-Elimination_Reactions",
-
 ]
 
+def clean_latex(text: str) -> str:
+    """
+    Strip LaTeX/MathJax boilerplate injected by LibreTexts pages.
+    Removes \\newcommand blocks, \\( ... \\) inline math definitions,
+    and other non-readable math markup that pollutes chunk text.
+    """
+    # Remove \newcommand and \renewcommand definitions
+    text = re.sub(r"\\(re)?newcommand\{[^}]*\}\{[^}]*\}", "", text)
+    text = re.sub(r"\\(re)?newcommand\{[^}]*\}\[[^\]]*\]\{[^}]*\}", "", text)
+    # Remove \( ... \) and \[ ... \] math blocks
+    text = re.sub(r"\\\(.*?\\\)", "", text, flags=re.DOTALL)
+    text = re.sub(r"\\\[.*?\\\]", "", text, flags=re.DOTALL)
+    # Remove \definecolor and \unicode directives
+    text = re.sub(r"\\definecolor\{[^}]*\}\{[^}]*\}\{[^}]*\}", "", text)
+    text = re.sub(r"\\unicode\[[^\]]*\]\{[^}]*\}", "", text)
+    # Remove leftover backslash commands like \vec, \mathbf, \mathrm
+    text = re.sub(r"\\[a-zA-Z]+(\{[^}]*\})*", "", text)
+    # Collapse excess whitespace and blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()
+
+
 def fetch_page_text(url: str) -> str:
-    """Scrape main text content from a LibreTexts or similar page."""
+    """Scrape and clean main text content from a LibreTexts or similar page."""
     headers = {"User-Agent": "orgo-rag-bot/0.1 (educational project)"}
     r = requests.get(url, headers=headers, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, HTML_PARSER)
     # LibreTexts stores content in #content or article tags
     content = soup.find("div", {"id": "content"}) or soup.find("article")
-    if content:
-        return content.get_text(separator="\n", strip=True)
-    return soup.get_text(separator="\n", strip=True)
+    raw = content.get_text(separator="\n", strip=True) if content \
+          else soup.get_text(separator="\n", strip=True)
+    return clean_latex(raw)
 
 
 def ingest_libretexts() -> list[dict]:
@@ -348,29 +370,67 @@ def ingest_khan_academy() -> list[dict]:
 def ingest_stack_exchange(tag: str = "organic-chemistry", page_size: int = 30) -> list[dict]:
     """
     Fetch top-voted Q&A from Chemistry Stack Exchange via public API.
+    Retrieves both the question body and the top accepted/highest-voted answer
+    so chunks contain complete, answerable content rather than just a question title.
     No authentication required.
     """
     print(f"  Fetching Chemistry Stack Exchange tag: {tag} ...")
-    url = "https://api.stackexchange.com/2.3/questions"
-    params = {
-        "order": "desc",
-        "sort": "votes",
-        "tagged": tag,
-        "site": "chemistry",
+
+    # Step 1: fetch questions with bodies
+    q_url = "https://api.stackexchange.com/2.3/questions"
+    q_params = {
+        "order":    "desc",
+        "sort":     "votes",
+        "tagged":   tag,
+        "site":     "chemistry",
         "pagesize": page_size,
-        "filter": "withbody",
+        "filter":   "withbody",
     }
-    r = requests.get(url, params=params, timeout=15)
+    r = requests.get(q_url, params=q_params, timeout=15)
     r.raise_for_status()
     items = r.json().get("items", [])
 
+    # Step 2: fetch answers for each question
+    question_ids = [str(item["question_id"]) for item in items]
+    answers_map: dict[int, str] = {}
+
+    if question_ids:
+        ids_str = ";".join(question_ids)
+        a_url = f"https://api.stackexchange.com/2.3/questions/{ids_str}/answers"
+        a_params = {
+            "order":    "desc",
+            "sort":     "votes",
+            "site":     "chemistry",
+            "pagesize": 100,
+            "filter":   "withbody",
+        }
+        a_resp = requests.get(a_url, params=a_params, timeout=15)
+        a_resp.raise_for_status()
+        for answer in a_resp.json().get("items", []):
+            qid = answer["question_id"]
+            # Keep only the top-voted answer per question
+            if qid not in answers_map:
+                answers_map[qid] = BeautifulSoup(
+                    answer.get("body", ""), HTML_PARSER
+                ).get_text(" ", strip=True)
+        time.sleep(0.5)
+
+    # Step 3: combine Q + top answer into one chunk-able document
     all_chunks = []
     for item in items:
-        q_text = BeautifulSoup(item.get("body", ""), HTML_PARSER).get_text(" ", strip=True)
-        q_url  = item.get("link", "")
-        title  = item.get("title", "")
+        q_text = BeautifulSoup(
+            item.get("body", ""), HTML_PARSER
+        ).get_text(" ", strip=True)
+        title   = item.get("title", "")
+        qid     = item["question_id"]
+        src_url = item.get("link", "")
+
+        answer_text = answers_map.get(qid, "")
         combined = f"Q: {title}\n\n{q_text}"
-        chunks = semantic_chunk(combined, "stackexchange", q_url)
+        if answer_text:
+            combined += f"\n\nA: {answer_text}"
+
+        chunks = semantic_chunk(combined, "stackexchange", src_url)
         all_chunks.extend(chunks)
         time.sleep(0.3)
 
