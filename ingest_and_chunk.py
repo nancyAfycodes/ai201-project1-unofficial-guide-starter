@@ -257,13 +257,14 @@ def ingest_reddit(subreddit: str, label: str) -> list[dict]:
 LIBRETEXTS_URLS = [
     # Nucleophilic substitution (SN1/SN2)
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_at_sp3_Carbon-_Nucleophilic_Substitution",
+    "Organic_Chemistry_(OpenStax)/11%3A_Reactions_of_Alkyl_Halides-_Nucleophilic_Substitutions_and_Eliminations/"
+    "11.01%3A_The_Discovery_of_Nucleophilic_Substitution_Reactions",
     # Stereochemistry
     "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
     "Organic_Chemistry_(OpenStax)/05%3A_Stereochemistry_at_Tetrahedral_Centers",
     # Elimination reactions (E1/E2)
-    "https://chem.libretexts.org/Bookshelves/Organic_Chemistry/"
-    "Organic_Chemistry_(OpenStax)/12%3A_Reactions_at_sp3_Carbon-_Elimination",
+    "https://chem.libretexts.org/Bookshelves/Inorganic_Chemistry/"
+    "Organometallic_Chemistry_(Evans)/04%3A_Fundamentals_of_Organometallic_Chemistry/4.01%3A_-Elimination_Reactions",
 ]
 
 def fetch_page_text(url: str) -> str:
@@ -300,7 +301,7 @@ def ingest_libretexts() -> list[dict]:
 KHAN_URLS = [
     "https://www.khanacademy.org/science/organic-chemistry/substitution-elimination-reactions",
     "https://www.khanacademy.org/science/organic-chemistry/stereochemistry-topic",
-    "https://www.khanacademy.org/science/organic-chemistry/acid-base-chemistry-organic",
+    "https://www.khanacademy.org/science/organic-chemistry/organic-structures/acid-base-review/v/organic-acid-base-mechanisms",
 ]
 
 def ingest_khan_academy() -> list[dict]:
