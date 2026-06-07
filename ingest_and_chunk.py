@@ -214,52 +214,52 @@ def semantic_chunk(
 
 # -- Reddit --
 
-def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
-    """
-    Fetch top posts from a subreddit using Reddit's public JSON API.
-    No credentials required — appends .json to the standard Reddit URL.
-    Browser-like headers are required; Reddit blocks requests that look automated.
-    """
-    url = f"https://www.reddit.com/r/{subreddit}/top.json"
-    headers = {
-        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/124.0.0.0 Safari/537.36",
-        "Accept":          "application/json, text/javascript, */*; q=0.01",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Referer":         "https://www.reddit.com/",
-        "DNT":             "1",
-    }
-    params = {"t": "all", "limit": limit}
-    r = requests.get(url, headers=headers, params=params, timeout=10)
-    r.raise_for_status()
-    posts = []
-    for post in r.json()["data"]["children"]:
-        d = post["data"]
-        posts.append({
-            "title":    d.get("title", ""),
-            "selftext": d.get("selftext", ""),
-            "url":      f"https://reddit.com{d.get('permalink', '')}",
-            "score":    d.get("score", 0),
-        })
-    return posts
+# def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
+#     """
+#     Fetch top posts from a subreddit using Reddit's public JSON API.
+#     No credentials required — appends .json to the standard Reddit URL.
+#     Browser-like headers are required; Reddit blocks requests that look automated.
+#     """
+#     url = f"https://www.reddit.com/r/{subreddit}/top.json"
+#     headers = {
+#         "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+#                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+#                            "Chrome/124.0.0.0 Safari/537.36",
+#         "Accept":          "application/json, text/javascript, */*; q=0.01",
+#         "Accept-Language": "en-US,en;q=0.9",
+#         "Accept-Encoding": "gzip, deflate, br",
+#         "Referer":         "https://www.reddit.com/",
+#         "DNT":             "1",
+#     }
+#     params = {"t": "all", "limit": limit}
+#     r = requests.get(url, headers=headers, params=params, timeout=10)
+#     r.raise_for_status()
+#     posts = []
+#     for post in r.json()["data"]["children"]:
+#         d = post["data"]
+#         posts.append({
+#             "title":    d.get("title", ""),
+#             "selftext": d.get("selftext", ""),
+#             "url":      f"https://reddit.com{d.get('permalink', '')}",
+#             "score":    d.get("score", 0),
+#         })
+#     return posts
 
 
-def ingest_reddit(subreddit: str, label: str) -> list[dict]:
-    """Ingest top posts from a subreddit and chunk them semantically."""
-    print(f"  Fetching r/{subreddit} ...")
-    posts = fetch_reddit_posts(subreddit, limit=25)
-    all_chunks = []
-    for post in posts:
-        text = f"{post['title']}\n\n{post['selftext']}".strip()
-        if len(text) < 50:
-            continue
-        chunks = semantic_chunk(text, label, post["url"])
-        all_chunks.extend(chunks)
-        time.sleep(0.5)   # polite rate limiting
-    print(f"    → {len(all_chunks)} chunks from r/{subreddit}")
-    return all_chunks
+# def ingest_reddit(subreddit: str, label: str) -> list[dict]:
+#     """Ingest top posts from a subreddit and chunk them semantically."""
+#     print(f"  Fetching r/{subreddit} ...")
+#     posts = fetch_reddit_posts(subreddit, limit=25)
+#     all_chunks = []
+#     for post in posts:
+#         text = f"{post['title']}\n\n{post['selftext']}".strip()
+#         if len(text) < 50:
+#             continue
+#         chunks = semantic_chunk(text, label, post["url"])
+#         all_chunks.extend(chunks)
+#         time.sleep(0.5)   # polite rate limiting
+#     print(f"    → {len(all_chunks)} chunks from r/{subreddit}")
+#     return all_chunks
 
 
 # -- LibreTexts --
@@ -422,13 +422,13 @@ def run_pipeline(
     all_chunks: list[dict] = []
 
     # -- Reddit sources --
-    print("\n[1/4] Ingesting Reddit ...")
-    try:
-        all_chunks += ingest_reddit("OrganicChemistry", "reddit")
-        all_chunks += ingest_reddit("premed",           "premed_reddit")
-        all_chunks += ingest_reddit("Mcat",             "mcat_reddit")
-    except Exception as e:
-        print(f"  ✗ Reddit ingestion failed: {e}")
+    # print("\n[1/4] Ingesting Reddit ...")
+    # try:
+    #     all_chunks += ingest_reddit("OrganicChemistry", "reddit")
+    #     all_chunks += ingest_reddit("premed",           "premed_reddit")
+    #     all_chunks += ingest_reddit("Mcat",             "mcat_reddit")
+    # except Exception as e:
+    #     print(f"  ✗ Reddit ingestion failed: {e}")
 
     # -- LibreTexts --
     print("\n[2/4] Ingesting LibreTexts ...")
