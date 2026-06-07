@@ -218,10 +218,20 @@ def fetch_reddit_posts(subreddit: str, limit: int = 25) -> list[dict]:
     """
     Fetch top posts from a subreddit using Reddit's public JSON API.
     No credentials required — appends .json to the standard Reddit URL.
+    Browser-like headers are required; Reddit blocks requests that look automated.
     """
     url = f"https://www.reddit.com/r/{subreddit}/top.json"
-    headers = {"User-Agent": REDDIT_USER_AGENT}
-    params  = {"t": "all", "limit": limit}
+    headers = {
+        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/124.0.0.0 Safari/537.36",
+        "Accept":          "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer":         "https://www.reddit.com/",
+        "DNT":             "1",
+    }
+    params = {"t": "all", "limit": limit}
     r = requests.get(url, headers=headers, params=params, timeout=10)
     r.raise_for_status()
     posts = []
@@ -265,6 +275,7 @@ LIBRETEXTS_URLS = [
     # Elimination reactions (E1/E2)
     "https://chem.libretexts.org/Bookshelves/Inorganic_Chemistry/"
     "Organometallic_Chemistry_(Evans)/04%3A_Fundamentals_of_Organometallic_Chemistry/4.01%3A_-Elimination_Reactions",
+
 ]
 
 def fetch_page_text(url: str) -> str:
