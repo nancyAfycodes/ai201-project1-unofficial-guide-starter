@@ -108,9 +108,25 @@ If deployed for real users, key tradeoffs in model selection would include:
      Consider: noisy or inconsistent documents, missing source attribution, off-topic
      retrieval, chunks that split key information across boundaries. -->
 
-1.
+1. Nuanced / Visual questions - model not being unable to answer question(s) that aren't easily described through text
 
-2.
+2. Terminology mismatch - model may not be able to understand common terminology that is not present in its training data. Consequently, the answer generated maybe inaccurate. For example, both Claude and ChatGPT refer to organic chemistry as 'orgo', I have alwaysed used the term 'OChem' instead. 
+
+## AI generated( listed those above and asked for additional challenge considerations)
+
+1. Source Quality Variance
+Reddit and forums contain both excellent advice and confidently wrong information. Your RAG system has no built-in way to distinguish a knowledgeable upperclassman from someone who failed orgo twice. Without source quality filtering, bad chunks can surface as grounded answers.
+2. Chunk Boundary Problems
+A mechanism explanation that gets split mid-step across two chunks may return only half the context. The retrieved chunk looks relevant but the answer generated from it will be incomplete or misleading.
+3. Query-Chunk Vocabulary Gap
+A student asks "why does the ring flip in cyclohexane?" but your chunks use the phrase "chair conformation interconversion." The embedding similarity may be low enough that the right chunk never gets retrieved — even though it directly answers the question.
+4. Outdated or Course-Specific Information
+Some sources may reference a specific professor's exam format, a textbook edition, or a curriculum that differs from the student using the system. Retrieved chunks may be accurate but irrelevant to the user's actual course.
+5. Multi-hop Questions
+Some orgo questions require connecting multiple concepts — "Why does an SN2 reaction fail on neopentyl bromide?" requires understanding both steric hindrance AND the SN2 mechanism. A single top-K retrieval pass may not surface all the necessary context.
+6. Overconfident Generation
+Even when retrieved chunks are weak or only partially relevant, LLMs tend to generate fluent, confident-sounding answers. Without a confidence score or citation check, students may trust a poorly grounded answer.
+
 
 ---
 
@@ -121,7 +137,27 @@ If deployed for real users, key tradeoffs in model selection would include:
      Label each stage with the tool or library you're using.
      You can use ASCII art, a Mermaid diagram, or embed a sketch as an image.
      You'll use this diagram as context when prompting AI tools to implement each stage. -->
+```mermaid
+flowchart TD
+    A["**Stage 1 — Document ingestion**\nReddit, Stack Exchange, LibreTexts, Khan Academy"]
+    B["**Stage 2 — Chunking**\nSemantic (Reddit/SE) + fixed 500 tok w/ overlap (LibreTexts)"]
+    C["**Stage 3 — Embedding**\ntext-embedding-3-large (OpenAI)"]
+    D["**Stage 4 — Vector store + retrieval**\nTop-K semantic search · K = 3–10 dynamic"]
+    E["**Stage 5 — Response generation**\nLLM synthesizes grounded, cited answer"]
 
+    Q([User query]) -->|query text| E
+    A -->|raw docs| B
+    B -->|text chunks + metadata| C
+    C -->|dense vectors| D
+    D -->|top-K chunks| E
+    E -->|cited answer| R([User])
+
+    style A fill:#9FE1CB,stroke:#0F6E56,color:#085041
+    style B fill:#9FE1CB,stroke:#0F6E56,color:#085041
+    style C fill:#CECBF6,stroke:#534AB7,color:#3C3489
+    style D fill:#CECBF6,stroke:#534AB7,color:#3C3489
+    style E fill:#F5C4B3,stroke:#993C1D,color:#712B13
+```
 ---
 
 ## AI Tool Plan
@@ -135,7 +171,7 @@ If deployed for real users, key tradeoffs in model selection would include:
      "I'll use AI to help me code" is not a plan.
      "I'll give Claude my Chunking Strategy section and ask it to implement chunk_text()
      with my specified chunk size and overlap" is a plan. -->
-
+Currently I'm using both Claude (primary) and ChaptGPT, to assist with the project.
 **Milestone 3 — Ingestion and chunking:**
 
 **Milestone 4 — Embedding and retrieval:**
