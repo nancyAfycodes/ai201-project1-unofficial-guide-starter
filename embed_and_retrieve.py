@@ -3,7 +3,9 @@ Unofficial Guide: Organic Chemistry RAG Pipeline
 Stage 3 — Embedding
 Stage 4 — Vector Store + Retrieval
 
-Embedding model : all-MiniLM-L6-v2 (sentence-transformers, runs locally)
+Embedding model : multi-qa-MiniLM-L6-cos-v1 (sentence-transformers, runs locally)
+                  Trained on Q&A pairs — better at matching student questions
+                  to relevant chunks than general-purpose models.
 Vector store    : ChromaDB (persistent, on-disk)
 
 Usage:
@@ -28,9 +30,9 @@ from chromadb.config import Settings
 # ---------------------------------------------------------------------------
 
 CHUNKS_FILE   = "chunks.jsonl"
-CHROMA_DIR    = "chroma_db"          # persistent on-disk vector store
-COLLECTION    = "orgo_guide"         # ChromaDB collection name
-EMBED_MODEL   = "all-MiniLM-L6-v2"  # local, no API key required
+CHROMA_DIR    = "chroma_db"                    # persistent on-disk vector store
+COLLECTION    = "orgo_guide_v2"               # new collection — fresh build with new model
+EMBED_MODEL   = "multi-qa-MiniLM-L6-cos-v1"  # Q&A-trained, better for student queries
 
 # Dynamic top-k — adjust via query call or environment variable
 DEFAULT_TOP_K = int(os.getenv("TOP_K", 5))
@@ -43,7 +45,10 @@ DEFAULT_TOP_K = int(os.getenv("TOP_K", 5))
 def load_embedding_model(model_name: str = EMBED_MODEL) -> SentenceTransformer:
     """
     Load the sentence-transformers embedding model.
-    all-MiniLM-L6-v2 runs entirely locally — no API key, no rate limits.
+    multi-qa-MiniLM-L6-cos-v1 is trained on question-answer pairs, making it
+    significantly better at matching student questions to relevant chunk text
+    than general-purpose models like all-MiniLM-L6-v2.
+    Runs entirely locally — no API key, no rate limits.
     First run downloads the model (~80MB); subsequent runs load from cache.
     """
     print(f"Loading embedding model: {model_name} ...")
