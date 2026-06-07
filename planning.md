@@ -63,11 +63,22 @@ Since organic chemistry (OChem) answers can range from one-liners to multiline p
      support, accuracy on domain-specific text, latency? -->
 
 **Embedding model:**
+Model: text-embedding-3-large, due its stronger performance on technical, domain-specific text and higher dimensional embeddings, which improve semantic similarity for nuanced OChem concepts like stereochemistry and reaction mechanisms.
 
 **Top-k:**
+The number of chunks that will be retrieved will be based on semantics, from low K value of  3-5 for simple short answer questions to 8-10 for more detailed answers that may involve diagrams.
+K = 3–5 dynamic, for simple conceptual questions. 
+K = 8–10 for complex multi-step mechanism questions. 
+Note: embeddings retrieve text only; mechanism diagrams are represented through their text descriptions.
 
 **Production tradeoff reflection:**
-
+If deployed for real users, key tradeoffs in model selection would include:
+- Latency vs. accuracy: text-embedding-3-large is slower than the small variant; 
+  a high-traffic system may prefer the small model with reranking instead.
+- Multilingual support: switching to multilingual-e5-large would better serve 
+  non-English speaking students at the cost of some domain-specific accuracy.
+- Context length: longer context models reduce the risk of truncating a full 
+  mechanism explanation mid-chunk.
 ---
 
 ## Evaluation Plan
@@ -77,13 +88,17 @@ Since organic chemistry (OChem) answers can range from one-liners to multiline p
      is right or wrong. "What are good dining halls?" is too vague.
      "What do students say about wait times at [dining hall name] during lunch?" is testable. -->
 
-| # | Question | Expected answer |
-|---|----------|-----------------|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| # | Test Question                                                                          | Expected Correct Answer                                                                                                                                                                                                                                                   |
+| - | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | What is the difference between SN1 and SN2 reaction mechanisms?                        | **SN1** is a two-step mechanism proceeding through a carbocation intermediate, favored by tertiary substrates and polar protic solvents.<br><br>**SN2** is a one-step concerted mechanism with backside attack, favored by primary substrates and polar aprotic solvents. |
+| 2 | How do students recommend memorizing reaction mechanisms in organic chemistry?         | Students recommend drawing mechanisms repeatedly by hand, focusing on electron flow with curved arrows, grouping reactions by mechanism type rather than memorizing individually, and using spaced repetition.                                                            |
+| 3 | What factors determine whether E1 or E2 elimination will occur?                        | **E1** is favored by tertiary substrates, weak bases, and polar protic solvents.<br><br>**E2** is favored by strong bulky bases and requires an anti-periplanar arrangement of the leaving group and beta hydrogen.                                                       |
+| 4 | What do students say is the hardest topic in Orgo 1 and how did they get through it?   | Students commonly cite stereochemistry (R/S configuration, enantiomers, diastereomers) as the hardest topic. Strategies include building molecular models, practicing with Fischer projections, and working through many practice problems.                               |
+| 5 | How does resonance stabilization affect carbocation stability?                         | Greater resonance delocalization stabilizes carbocations more. Allylic and benzylic carbocations are especially stable because the positive charge is delocalized across multiple atoms through pi systems.                                                               |
+| 6 | What is the difference between a nucleophile and an electrophile in organic chemistry? | A nucleophile is an electron-rich species that donates electrons to form a bond, while an electrophile is an electron-poor species that accepts electrons. Nucleophiles attack electrophilic carbon centers.                                                              |
+| 7 | What study strategies do premed students use specifically for orgo exam preparation?   | Premed students recommend doing every practice exam available, focusing on mechanism patterns over memorization, forming study groups for problem-solving, reviewing professor-specific exam styles, and not falling behind since topics build on each other.             |
+| 8 | How do students describe the difficulty difference between Orgo 1 and Orgo 2?          | Students generally say Orgo 2 introduces more complex reactions (carbonyls, aromatic chemistry, multistep synthesis), but students who mastered mechanism thinking in Orgo 1 often find it more manageable. The volume of reactions increases significantly.              |
+
 
 ---
 
