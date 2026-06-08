@@ -338,3 +338,7 @@ This was a spec divergence driven by empirical testing rather than up-front plan
   embedding model was also switched from `all-MiniLM-L6-v2` to `multi-qa-MiniLM-L6-cos-v1`
   after retrieval testing revealed poor distance scores, requiring a full vector store
   rebuild with a new collection name to avoid stale embeddings.
+
+  ## Demo Video
+
+[Watch the Demo](https://youtu.be/1KLYhgsEfps)
