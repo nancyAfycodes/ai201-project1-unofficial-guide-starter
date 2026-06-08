@@ -63,14 +63,15 @@ Overlap: ~ 100 tokens
 
 **Why these choices fit your documents:**
 Since organic chemistry (OChem) answers can range from one-liners to multiline paragraphs, I think a hybrid chunking strategy wii be the most effective. I think a chunk size of about 500 tokens with an overlap of about 100 tokens ensures that answers are not lost at retrieval time. Another strategy is to add metadata tagging per chunk to help in improving answer quality.
-Organic chemistry answers range from one-liners ("SN2 reactions invert stereochemistry")
+
+(AI generated)Organic chemistry answers range from one-liners ("SN2 reactions invert stereochemistry")
 to multi-paragraph mechanism walkthroughs. A hybrid chunking strategy handles both cases:
 Reddit and Stack Exchange posts are split semantically at paragraph and comment boundaries,
 keeping each self-contained thought as its own chunk. LibreTexts pages use fixed-size
 chunking with 100-token overlap to ensure that mechanism explanations spanning multiple
 paragraphs are not lost at chunk boundaries. Metadata tagging (`source`, `topic`,
 `content_type`, `chunk_index`) is applied to every chunk at creation time to support
-filtered retrieval later (AI generated).
+filtered retrieval later.
 
 Preprocessing applied before chunking:
 - LaTeX/MathJax boilerplate stripped from LibreTexts pages using regex (`clean_latex()`)
