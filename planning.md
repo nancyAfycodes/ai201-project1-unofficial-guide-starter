@@ -174,9 +174,11 @@ flowchart TD
 Currently I'm using both Claude (primary) and ChaptGPT, to assist with the project.
 
 **Milestone 3 — Ingestion and chunking:**
-
+In this section, data ingestion and chunking were defined based on the topics. Since the subject of organic chemistry was chosen metadata tagging was partially implemented to allow to allow more refined question-answer prompt. 
+The main challenged faced is Organic chemistry proved to be a challenging, for retrieval quality was directly tied to corpus coverage, queries with dedicated source pages returned medium-relevance results, whilst queries without matching chunks failed entirely. This highlights a core RAG limitation: reasoning is heavily based on its source documents.
 
 **Milestone 4 — Embedding and retrieval:**
-
+After testing with suggested model, all-MiniLM-L6-v2 (sentence transformers) I noticed that the distance score generated was poor. As a result, I changed to model to multi-qa-MiniLM-L6-cos-v1, which was better suited for the question-answer pair required and distance score results improved.
 
 **Milestone 5 — Generation and interface:**
+In this section, I stated explicitly not to allow hallucinations. In addition, I am adding grounding testing to show distance scores based on chunks. Gradio was used as an interface for testing.
