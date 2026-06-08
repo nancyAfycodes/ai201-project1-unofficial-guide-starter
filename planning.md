@@ -172,8 +172,11 @@ flowchart TD
      "I'll give Claude my Chunking Strategy section and ask it to implement chunk_text()
      with my specified chunk size and overlap" is a plan. -->
 Currently I'm using both Claude (primary) and ChaptGPT, to assist with the project.
+
 **Milestone 3 — Ingestion and chunking:**
 
+
 **Milestone 4 — Embedding and retrieval:**
+
 
 **Milestone 5 — Generation and interface:**

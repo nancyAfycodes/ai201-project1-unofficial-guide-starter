@@ -100,10 +100,21 @@ def build_source_list(chunks: list[dict]) -> str:
 
 def generate_answer(
     question: str,
-    top_k: int = DEFAULT_TOP_K,
+    top_k: int                   = DEFAULT_TOP_K,
+    filter_source: str | None    = None,
+    filter_topic: str | None     = None,
 ) -> tuple[str, str, list[dict]]:
     """
     Full RAG pipeline: retrieve → generate → attribute.
+
+    Parameters
+    ----------
+    question      : plain-language question from the user
+    top_k         : number of chunks to retrieve
+    filter_source : optional metadata filter — restrict to one source
+                    e.g. "libretexts" | "stackexchange"
+    filter_topic  : optional metadata filter — restrict to one topic
+                    e.g. "SN1/SN2/E1/E2" | "stereochemistry"
 
     Returns
     -------
@@ -114,8 +125,13 @@ def generate_answer(
     if not question.strip():
         return "Please enter a question.", "", []
 
-    # Stage 4 — retrieve relevant chunks
-    chunks = retrieve(query=question, top_k=top_k)
+    # Stage 4 — retrieve relevant chunks with optional metadata filters
+    chunks = retrieve(
+        query         = question,
+        top_k         = top_k,
+        filter_source = filter_source,
+        filter_topic  = filter_topic,
+    )
 
     if not chunks:
         return (
@@ -155,12 +171,27 @@ def generate_answer(
 # Gradio interface
 # ---------------------------------------------------------------------------
 
-def gradio_query(question: str, top_k: int) -> tuple[str, str, str]:
+def gradio_query(
+    question: str,
+    top_k: int,
+    filter_source: str,
+    filter_topic: str,
+) -> tuple[str, str, str]:
     """
     Gradio-facing wrapper.
     Returns answer, sources, and a formatted chunk preview for transparency.
+    Passes optional metadata filters to the retrieval layer.
     """
-    answer, sources_text, chunks = generate_answer(question, top_k=int(top_k))
+    # Convert "All" sentinel values to None so retrieve() applies no filter
+    source = None if filter_source == "All" else filter_source
+    topic  = None if filter_topic  == "All" else filter_topic
+
+    answer, sources_text, chunks = generate_answer(
+        question,
+        top_k=int(top_k),
+        filter_source=source,
+        filter_topic=topic,
+    )
 
     # Build chunk preview for the "Retrieved Chunks" accordion
     if chunks:
@@ -213,6 +244,35 @@ def build_interface() -> gr.Blocks:
                     info="Higher = more context, but may add noise",
                 )
 
+        # Metadata filters — wired directly to retrieve() parameters
+        with gr.Accordion("🔎 Filter by Source or Topic (optional)", open=False):
+            gr.Markdown(
+                "Narrow retrieval to a specific source or topic. "
+                "Leave both as **All** for unfiltered search across the full corpus."
+            )
+            with gr.Row():
+                source_dropdown = gr.Dropdown(
+                    choices=["All", "libretexts", "stackexchange"],
+                    value="All",
+                    label="Source",
+                    info="Filter chunks by document source",
+                )
+                topic_dropdown = gr.Dropdown(
+                    choices=[
+                        "All",
+                        "SN1/SN2/E1/E2",
+                        "stereochemistry",
+                        "reaction mechanisms",
+                        "carbonyl chemistry",
+                        "aromaticity",
+                        "acids and bases",
+                        "general",
+                    ],
+                    value="All",
+                    label="Topic",
+                    info="Filter chunks by inferred topic tag",
+                )
+
         submit_btn = gr.Button("Ask", variant="primary")
 
         answer_box = gr.Textbox(
@@ -248,14 +308,14 @@ def build_interface() -> gr.Blocks:
         # Wire up the submit button
         submit_btn.click(
             fn=gradio_query,
-            inputs=[question_box, top_k_slider],
+            inputs=[question_box, top_k_slider, source_dropdown, topic_dropdown],
             outputs=[answer_box, sources_box, chunks_box],
         )
 
         # Also allow Enter key submission
         question_box.submit(
             fn=gradio_query,
-            inputs=[question_box, top_k_slider],
+            inputs=[question_box, top_k_slider, source_dropdown, topic_dropdown],
             outputs=[answer_box, sources_box, chunks_box],
         )
 
